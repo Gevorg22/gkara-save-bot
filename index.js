@@ -83,11 +83,12 @@ bot.on('message', async (msg) => {
         '-f "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best[height<=720]/best"',
         '--merge-output-format mp4',
         '--no-playlist',
+        '--no-warnings',
         '-o', `"${rawFile}"`,
         `"${text}"`,
     ].join(' ');
 
-    exec(ytDlpCmd, async (err, stdout, stderr) => {
+    exec(ytDlpCmd, { timeout: 300000, maxBuffer: 10 * 1024 * 1024 }, async (err, stdout, stderr) => {
         if (err || !fs.existsSync(rawFile)) {
             console.error('yt-dlp error:', err?.message, stderr);
             await bot.sendMessage(
