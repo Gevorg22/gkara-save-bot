@@ -78,15 +78,17 @@ bot.on('message', async (msg) => {
 
     await bot.sendMessage(chatId, '⏳ Ссылка принята. Скачиваю медиа, подождите...\n\n🤖 gkara-save-bot by Gevorg Karagozian');
 
+    const isYoutube = /(youtube\.com|youtu\.be)/i.test(text);
     const ytDlpCmd = [
         'yt-dlp',
         '-f "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best[height<=720]/best"',
         '--merge-output-format mp4',
         '--no-playlist',
         '--no-warnings',
+        isYoutube ? '--extractor-args "youtube:player_client=ios,tv_embedded"' : '',
         '-o', `"${rawFile}"`,
         `"${text}"`,
-    ].join(' ');
+    ].filter(Boolean).join(' ');
 
     exec(ytDlpCmd, { timeout: 300000, maxBuffer: 10 * 1024 * 1024 }, async (err, stdout, stderr) => {
         if (err || !fs.existsSync(rawFile)) {
