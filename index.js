@@ -76,7 +76,7 @@ bot.on('message', async (msg) => {
     const rawFile = `/tmp/dl_${chatId}_${ts}.mp4`;
     const compressedFile = `/tmp/ready_${chatId}_${ts}.mp4`;
 
-    await bot.sendMessage(chatId, '⏳ Ссылка принята. Скачиваю медиа, подождите...');
+    await bot.sendMessage(chatId, '⏳ Ссылка принята. Скачиваю медиа, подождите...\n\n🤖 gkara-save-bot by Gevorg Karagozian');
 
     const ytDlpCmd = [
         'yt-dlp',
