@@ -7,8 +7,9 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Установка yt-dlp через pip — надёжнее, чем npm-пакет
-RUN pip3 install -q --break-system-packages yt-dlp
+# Установка последней версии yt-dlp напрямую с GitHub
+RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp \
+    && chmod a+rx /usr/local/bin/yt-dlp
 
 WORKDIR /app
 
