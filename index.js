@@ -81,7 +81,7 @@ bot.on('message', async (msg) => {
     const isYoutube = /(youtube\.com|youtu\.be)/i.test(text);
     const ytDlpCmd = [
         'yt-dlp',
-        '-f "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best[height<=720]/best"',
+        '-f "best[height<=720]/best"',
         '--merge-output-format mp4',
         '--no-playlist',
         '--no-warnings',
