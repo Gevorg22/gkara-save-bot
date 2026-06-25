@@ -9,17 +9,17 @@ pinned: false
 
 # gkara-save-bot
 
-> Бесплатный Telegram-бот для скачивания видео и фото из YouTube и Instagram.
-> Автор проекта: **Gevorg Karagozian**
+Бесплатный Telegram-бот для скачивания медиа из Instagram.
+Автор проекта: **Gevorg Karagozian**
 
 ---
 
 ## Возможности
 
-- Скачивание видео с **YouTube** (включая Shorts)
-- Скачивание видео и фото с **Instagram** (публичные посты и Reels)
-- Автоматическое сжатие тяжёлых файлов через **ffmpeg** (лимит Telegram — 50 МБ)
-- Автоочистка временных файлов с сервера после отправки
+- Reels и видео-посты
+- Фото и карусели (публичные посты)
+- Автоматическое сжатие видео через ffmpeg (лимит Telegram — 50 МБ)
+- Автоочистка временных файлов после отправки
 - Поддержка нескольких пользователей одновременно
 - Безопасное хранение токена через переменные окружения
 
@@ -31,10 +31,10 @@ pinned: false
 |---|---|
 | Runtime | Node.js 20 |
 | Telegram API | node-telegram-bot-api (webhook-режим) |
-| Загрузка медиа | yt-dlp (установлен через pip) |
+| Загрузка медиа | yt-dlp (последняя версия с GitHub) |
 | Сжатие видео | ffmpeg + ffprobe |
 | Контейнеризация | Docker |
-| Хостинг | Railway / Hugging Face Spaces |
+| Хостинг | Railway |
 | CI/CD | GitHub Actions (автодеплой при push) |
 
 ---
@@ -56,11 +56,12 @@ gkara-save-bot/
 
 ## Как это работает
 
-1. Пользователь отправляет ссылку на YouTube или Instagram
-2. `yt-dlp` скачивает медиа в формате MP4 (максимум 720p)
-3. Если файл > 49 МБ — `ffmpeg` сжимает его, рассчитывая битрейт по длительности
-4. Бот отправляет готовый файл пользователю
-5. Временные файлы удаляются с сервера
+1. Пользователь отправляет ссылку на Instagram
+2. yt-dlp скачивает медиа (видео или фото)
+3. Если видео > 49 МБ — ffmpeg сжимает его, рассчитывая битрейт по длительности
+4. Все видео перекодируются в H.264 с флагом faststart для совместимости с Telegram
+5. Бот отправляет файл пользователю
+6. Временные файлы удаляются с сервера
 
 ```
 Пользователь → Telegram → Webhook → Bot Server → yt-dlp → ffmpeg → Telegram → Пользователь
@@ -76,27 +77,21 @@ gkara-save-bot/
 |---|---|
 | `TELEGRAM_TOKEN` | Токен бота от @BotFather |
 
-### Railway (рекомендуется)
+### Railway
 
 1. Fork этого репозитория
 2. Создай новый проект на [railway.app](https://railway.app) из GitHub
 3. Добавь переменную `TELEGRAM_TOKEN` в Settings → Variables
-4. Зарегистрируй webhook:
+4. Зарегистрируй webhook одним запросом в браузере:
    ```
    https://api.telegram.org/bot{TOKEN}/setWebhook?url=https://{your-domain}/webhook/{TOKEN}
    ```
-
-### Hugging Face Spaces
-
-Проект поддерживает деплой на Hugging Face Spaces через Docker.
-GitHub Actions автоматически деплоит при каждом `push` в `main`.
 
 ---
 
 ## Автор
 
 **Gevorg Karagozian**
-- Telegram-бот: [@gkara_save_bot](https://t.me/gkara_save_bot)
 - GitHub: [github.com/Gevorg22](https://github.com/Gevorg22)
 
 ---
