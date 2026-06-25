@@ -1,9 +1,8 @@
 const TelegramBot = require('node-telegram-bot-api');
-const ytDlp = require('yt-dlp-exec');
-const { exec } = require('child_process');
-const fs = require('fs');
-const path = require('path');
-const http = require('http');
+const { exec } = require('node:child_process');
+const fs = require('node:fs');
+const path = require('node:path');
+const http = require('node:http');
 
 const token = process.env.TELEGRAM_TOKEN;
 if (!token) {
@@ -11,7 +10,6 @@ if (!token) {
     process.exit(1);
 }
 
-// Hugging Face Spaces требует HTTP-сервер на порту 7860, иначе Space считается "упавшим"
 http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
     res.end('gkara-save-bot is running');
@@ -48,26 +46,36 @@ bot.on('message', async (msg) => {
         );
     }
 
-    const rawFile = path.join('/tmp', `dl_${chatId}_${Date.now()}.mp4`);
-    const compressedFile = path.join('/tmp', `ready_${chatId}_${Date.now()}.mp4`);
+    const ts = Date.now();
+    const rawFile = `/tmp/dl_${chatId}_${ts}.mp4`;
+    const compressedFile = `/tmp/ready_${chatId}_${ts}.mp4`;
 
     await bot.sendMessage(chatId, '⏳ Ссылка принята. Скачиваю медиа, подождите...');
 
-    try {
-        await ytDlp(text, {
-            output: rawFile,
-            format: 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
-            mergeOutputFormat: 'mp4',
-        });
+    const ytDlpCmd = [
+        'yt-dlp',
+        '-f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best"',
+        '--merge-output-format mp4',
+        '--no-playlist',
+        '-o', `"${rawFile}"`,
+        `"${text}"`,
+    ].join(' ');
 
-        if (!fs.existsSync(rawFile)) {
-            throw new Error('Файл не был создан yt-dlp.');
+    exec(ytDlpCmd, async (err) => {
+        if (err || !fs.existsSync(rawFile)) {
+            console.error('yt-dlp error:', err?.message);
+            await bot.sendMessage(
+                chatId,
+                '❌ Не удалось обработать ссылку.\n' +
+                'Возможные причины: видео приватное, удалено или недоступно.'
+            );
+            return cleanup([rawFile, compressedFile]);
         }
 
         const fileSizeMb = fs.statSync(rawFile).size / (1024 * 1024);
 
         if (fileSizeMb > 49) {
-            await bot.sendMessage(chatId, `🎬 Файл ${fileSizeMb.toFixed(1)} МБ — сжимаю для Telegram (лимит 50 МБ)...`);
+            await bot.sendMessage(chatId, `🎬 Файл ${fileSizeMb.toFixed(1)} МБ — сжимаю для Telegram...`);
 
             const ffmpegCmd = [
                 'ffmpeg',
@@ -75,7 +83,7 @@ bot.on('message', async (msg) => {
                 '-vcodec libx264 -crf 28 -preset faster',
                 '-b:v 1M -maxrate 1.5M -bufsize 2M',
                 '-acodec aac -b:a 128k',
-                `-vf "scale=trunc(iw/2)*2:trunc(ih/2)*2"`,
+                '-vf "scale=trunc(iw/2)*2:trunc(ih/2)*2"',
                 `"${compressedFile}" -y`,
             ].join(' ');
 
@@ -92,22 +100,12 @@ bot.on('message', async (msg) => {
             await sendVideo(chatId, rawFile);
             cleanup([rawFile]);
         }
-    } catch (err) {
-        console.error('Ошибка загрузки:', err.message);
-        await bot.sendMessage(
-            chatId,
-            '❌ Не удалось обработать ссылку.\n' +
-            'Возможные причины: видео приватное, удалено или недоступно в вашем регионе.'
-        );
-        cleanup([rawFile, compressedFile]);
-    }
+    });
 });
 
 async function sendVideo(chatId, filePath) {
     try {
-        await bot.sendVideo(chatId, filePath, {
-            supports_streaming: true,
-        });
+        await bot.sendVideo(chatId, filePath, { supports_streaming: true });
     } catch (err) {
         console.error('Ошибка отправки в TG:', err.message);
         await bot.sendMessage(chatId, '❌ Ошибка отправки файла. Попробуйте ещё раз.');
@@ -119,7 +117,7 @@ function cleanup(files) {
         try {
             if (fs.existsSync(f)) fs.unlinkSync(f);
         } catch (e) {
-            console.warn('Не удалось удалить файл:', f);
+            console.warn('cleanup failed:', f, e.message);
         }
     });
 }
