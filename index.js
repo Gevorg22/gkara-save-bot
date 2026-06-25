@@ -2,6 +2,7 @@ const TelegramBot = require('node-telegram-bot-api');
 const { exec } = require('node:child_process');
 const fs = require('node:fs');
 const http = require('node:http');
+const path = require('node:path');
 
 const token = process.env.TELEGRAM_TOKEN;
 if (!token) {
@@ -9,26 +10,19 @@ if (!token) {
     process.exit(1);
 }
 
-// URL Space на Hugging Face: https://{owner}-{space-name}.hf.space
 const SPACE_URL = 'https://gevorg22-gkara-save-bot.hf.space';
 const WEBHOOK_PATH = `/webhook/${token}`;
-const WEBHOOK_URL = `${SPACE_URL}${WEBHOOK_PATH}`;
 
 const bot = new TelegramBot(token, { webHook: false });
+console.log('Ожидаю webhook на:', `${SPACE_URL}${WEBHOOK_PATH}`);
 
-// Webhook регистрируется вручную один раз через браузер:
-// https://api.telegram.org/bot{TOKEN}/setWebhook?url={WEBHOOK_URL}
-console.log('Ожидаю webhook на:', WEBHOOK_URL);
-
-// HTTP-сервер принимает запросы от Telegram и отвечает на порту 7860
 const server = http.createServer((req, res) => {
     if (req.method === 'POST' && req.url === WEBHOOK_PATH) {
         let body = '';
         req.on('data', chunk => { body += chunk; });
         req.on('end', () => {
             try {
-                const update = JSON.parse(body);
-                bot.processUpdate(update);
+                bot.processUpdate(JSON.parse(body));
             } catch (e) {
                 console.error('Ошибка парсинга update:', e.message);
             }
@@ -46,7 +40,7 @@ server.listen(7860, () => {
     console.log('Бот запущен и готов к работе...');
 });
 
-const SUPPORTED_LINK = /(youtube\.com|youtu\.be|instagram\.com)/i;
+const INSTAGRAM_LINK = /instagram\.com/i;
 
 bot.on('message', async (msg) => {
     const chatId = msg.chat.id;
@@ -57,64 +51,79 @@ bot.on('message', async (msg) => {
     if (text === '/start') {
         return bot.sendMessage(
             chatId,
-            '🚀 Привет! Я бесплатный бот-загрузчик медиа.\n' +
-            'Автор проекта: Gevorg Karagozian.\n\n' +
-            'Отправь мне ссылку на видео из YouTube или Instagram — ' +
-            'и я пришлю его файлом в течение пары минут!'
+            '👋 Привет! Я бот для скачивания медиа из Instagram.\n' +
+            'Автор: Gevorg Karagozian\n\n' +
+            'Что умею:\n' +
+            '🎬 Reels и видео-посты\n' +
+            '🖼 Фото и карусели\n\n' +
+            'Просто отправь ссылку на публичный пост — пришлю файл!'
         );
     }
 
-    if (!SUPPORTED_LINK.test(text)) {
+    if (!INSTAGRAM_LINK.test(text)) {
         return bot.sendMessage(
             chatId,
-            '⚠️ Поддерживаются только ссылки YouTube и Instagram.\n' +
-            'Пример: https://youtu.be/dQw4w9WgXcQ'
+            '⚠️ Поддерживается только Instagram.\n\n' +
+            'Примеры ссылок:\n' +
+            '• https://www.instagram.com/reel/...\n' +
+            '• https://www.instagram.com/p/...'
         );
     }
 
     const ts = Date.now();
-    const rawFile = `/tmp/dl_${chatId}_${ts}.mp4`;
+    const outputTemplate = `/tmp/dl_${chatId}_${ts}.%(ext)s`;
+    const videoFile = `/tmp/dl_${chatId}_${ts}.mp4`;
     const compressedFile = `/tmp/ready_${chatId}_${ts}.mp4`;
 
     await bot.sendMessage(chatId, '⏳ Ссылка принята. Скачиваю медиа, подождите...\n\n🤖 gkara-save-bot by Gevorg Karagozian');
 
-    const isYoutube = /(youtube\.com|youtu\.be)/i.test(text);
     const ytDlpCmd = [
         'yt-dlp',
-        '--merge-output-format mp4',
         '--no-playlist',
         '--no-warnings',
-        isYoutube ? '--extractor-args "youtube:player_client=ios"' : '',
-        '-o', `"${rawFile}"`,
+        '-o', `"${outputTemplate}"`,
         `"${text}"`,
-    ].filter(Boolean).join(' ');
+    ].join(' ');
 
     exec(ytDlpCmd, { timeout: 300000, maxBuffer: 10 * 1024 * 1024 }, async (err, stdout, stderr) => {
-        if (err || !fs.existsSync(rawFile)) {
-            console.error('yt-dlp error:', err?.message, stderr);
-            await bot.sendMessage(
-                chatId,
-                `❌ Ошибка yt-dlp:\n<pre>${(stderr || err?.message || 'unknown').slice(0, 3000)}</pre>`,
-                { parse_mode: 'HTML' }
-            );
-            return cleanup([rawFile, compressedFile]);
+        if (err) {
+            console.error('yt-dlp error:', stderr);
+            await bot.sendMessage(chatId, '❌ Не удалось скачать. Убедись что пост публичный и ссылка верная.');
+            return cleanup([videoFile, compressedFile]);
         }
 
-        const fileSizeMb = fs.statSync(rawFile).size / (1024 * 1024);
+        // Ищем скачанный файл (может быть .jpg, .mp4 и т.д.)
+        const files = fs.readdirSync('/tmp').filter(f => f.startsWith(`dl_${chatId}_${ts}`));
+        if (!files.length) {
+            await bot.sendMessage(chatId, '❌ Файл не найден после скачивания.');
+            return;
+        }
 
+        const downloadedFile = `/tmp/${files[0]}`;
+        const ext = path.extname(downloadedFile).toLowerCase();
+
+        // Фото — отправляем как фото
+        if (['.jpg', '.jpeg', '.png', '.webp'].includes(ext)) {
+            try {
+                await bot.sendPhoto(chatId, downloadedFile);
+            } catch (e) {
+                console.error('Ошибка отправки фото:', e.message);
+                await bot.sendMessage(chatId, '❌ Ошибка отправки фото.');
+            }
+            return cleanup([downloadedFile]);
+        }
+
+        // Видео — перекодируем для совместимости с Telegram
+        const fileSizeMb = fs.statSync(downloadedFile).size / (1024 * 1024);
+
+        let ffmpegCmd;
         if (fileSizeMb > 49) {
             await bot.sendMessage(chatId, `🎬 Файл ${fileSizeMb.toFixed(1)} МБ — сжимаю для Telegram...`);
-
-            // Считаем битрейт чтобы уложиться в 45 МБ (с запасом)
-            const duration = await getVideoDuration(rawFile);
-            const targetBitrate = duration > 0
-                ? Math.floor((45 * 8 * 1024) / duration)
-                : 800;
+            const duration = await getVideoDuration(downloadedFile);
+            const targetBitrate = duration > 0 ? Math.floor((45 * 8 * 1024) / duration) : 800;
             const videoBitrate = Math.max(200, targetBitrate - 128);
-
-            const ffmpegCmd = [
-                'ffmpeg',
-                `-i "${rawFile}"`,
+            ffmpegCmd = [
+                'ffmpeg', `-i "${downloadedFile}"`,
                 '-vcodec libx264 -preset faster',
                 `-b:v ${videoBitrate}k -maxrate ${videoBitrate * 2}k -bufsize ${videoBitrate * 4}k`,
                 '-acodec aac -b:a 128k',
@@ -122,37 +131,22 @@ bot.on('message', async (msg) => {
                 '-movflags +faststart',
                 `"${compressedFile}" -y`,
             ].join(' ');
-
-            exec(ffmpegCmd, async (error) => {
-                if (error) {
-                    console.error('ffmpeg error:', error.message);
-                    await bot.sendMessage(chatId, '❌ Ошибка при сжатии видео.');
-                    return cleanup([rawFile, compressedFile]);
-                }
-                await sendVideo(chatId, compressedFile);
-                cleanup([rawFile, compressedFile]);
-            });
         } else {
-            // Перекодируем через libx264 — гарантирует совместимость с Telegram
-            const repackCmd = [
-                'ffmpeg',
-                `-i "${rawFile}"`,
+            ffmpegCmd = [
+                'ffmpeg', `-i "${downloadedFile}"`,
                 '-vcodec libx264 -preset faster -crf 23',
                 '-acodec aac -b:a 128k',
                 '-vf "scale=trunc(iw/2)*2:trunc(ih/2)*2"',
                 '-movflags +faststart',
                 `"${compressedFile}" -y`,
             ].join(' ');
-            exec(repackCmd, { timeout: 300000 }, async (error) => {
-                if (error || !fs.existsSync(compressedFile)) {
-                    console.error('repack error:', error?.message);
-                    await sendVideo(chatId, rawFile);
-                    return cleanup([rawFile, compressedFile]);
-                }
-                await sendVideo(chatId, compressedFile);
-                cleanup([rawFile, compressedFile]);
-            });
         }
+
+        exec(ffmpegCmd, { timeout: 300000 }, async (error) => {
+            const fileToSend = (!error && fs.existsSync(compressedFile)) ? compressedFile : downloadedFile;
+            await sendVideo(chatId, fileToSend);
+            cleanup([downloadedFile, compressedFile]);
+        });
     });
 });
 
