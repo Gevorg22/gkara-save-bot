@@ -87,13 +87,13 @@ bot.on('message', async (msg) => {
         `"${text}"`,
     ].join(' ');
 
-    exec(ytDlpCmd, async (err) => {
+    exec(ytDlpCmd, async (err, stdout, stderr) => {
         if (err || !fs.existsSync(rawFile)) {
-            console.error('yt-dlp error:', err?.message);
+            console.error('yt-dlp error:', err?.message, stderr);
             await bot.sendMessage(
                 chatId,
-                '❌ Не удалось обработать ссылку.\n' +
-                'Возможные причины: видео приватное, удалено или недоступно.'
+                `❌ Ошибка yt-dlp:\n<pre>${(stderr || err?.message || 'unknown').slice(0, 3000)}</pre>`,
+                { parse_mode: 'HTML' }
             );
             return cleanup([rawFile, compressedFile]);
         }
