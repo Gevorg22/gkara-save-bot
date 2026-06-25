@@ -80,7 +80,7 @@ bot.on('message', async (msg) => {
 
     const ytDlpCmd = [
         'yt-dlp',
-        '-f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best"',
+        '-f "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best[height<=720]/best"',
         '--merge-output-format mp4',
         '--no-playlist',
         '-o', `"${rawFile}"`,
@@ -103,11 +103,18 @@ bot.on('message', async (msg) => {
         if (fileSizeMb > 49) {
             await bot.sendMessage(chatId, `🎬 Файл ${fileSizeMb.toFixed(1)} МБ — сжимаю для Telegram...`);
 
+            // Считаем битрейт чтобы уложиться в 45 МБ (с запасом)
+            const duration = await getVideoDuration(rawFile);
+            const targetBitrate = duration > 0
+                ? Math.floor((45 * 8 * 1024) / duration)
+                : 800;
+            const videoBitrate = Math.max(200, targetBitrate - 128);
+
             const ffmpegCmd = [
                 'ffmpeg',
                 `-i "${rawFile}"`,
-                '-vcodec libx264 -crf 28 -preset faster',
-                '-b:v 1M -maxrate 1.5M -bufsize 2M',
+                '-vcodec libx264 -preset faster',
+                `-b:v ${videoBitrate}k -maxrate ${videoBitrate * 2}k -bufsize ${videoBitrate * 4}k`,
                 '-acodec aac -b:a 128k',
                 '-vf "scale=trunc(iw/2)*2:trunc(ih/2)*2"',
                 `"${compressedFile}" -y`,
@@ -128,6 +135,14 @@ bot.on('message', async (msg) => {
         }
     });
 });
+
+function getVideoDuration(filePath) {
+    return new Promise((resolve) => {
+        exec(`ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${filePath}"`, (err, stdout) => {
+            resolve(err ? 0 : Number.parseFloat(stdout.trim()) || 0);
+        });
+    });
+}
 
 async function sendVideo(chatId, filePath) {
     try {
