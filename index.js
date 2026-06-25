@@ -132,11 +132,23 @@ bot.on('message', async (msg) => {
                 cleanup([rawFile, compressedFile]);
             });
         } else {
-            // Перепаковываем для совместимости с Telegram (faststart)
-            const repackCmd = `ffmpeg -i "${rawFile}" -c copy -movflags +faststart "${compressedFile}" -y`;
-            exec(repackCmd, async (error) => {
-                const fileToSend = (!error && fs.existsSync(compressedFile)) ? compressedFile : rawFile;
-                await sendVideo(chatId, fileToSend);
+            // Перекодируем через libx264 — гарантирует совместимость с Telegram
+            const repackCmd = [
+                'ffmpeg',
+                `-i "${rawFile}"`,
+                '-vcodec libx264 -preset faster -crf 23',
+                '-acodec aac -b:a 128k',
+                '-vf "scale=trunc(iw/2)*2:trunc(ih/2)*2"',
+                '-movflags +faststart',
+                `"${compressedFile}" -y`,
+            ].join(' ');
+            exec(repackCmd, { timeout: 300000 }, async (error) => {
+                if (error || !fs.existsSync(compressedFile)) {
+                    console.error('repack error:', error?.message);
+                    await sendVideo(chatId, rawFile);
+                    return cleanup([rawFile, compressedFile]);
+                }
+                await sendVideo(chatId, compressedFile);
                 cleanup([rawFile, compressedFile]);
             });
         }
