@@ -16,12 +16,9 @@ const WEBHOOK_URL = `${SPACE_URL}${WEBHOOK_PATH}`;
 
 const bot = new TelegramBot(token, { webHook: false });
 
-// Устанавливаем webhook при старте
-bot.setWebHook(WEBHOOK_URL).then(() => {
-    console.log('Webhook установлен:', WEBHOOK_URL);
-}).catch((err) => {
-    console.error('Ошибка установки webhook:', err.message);
-});
+// Webhook регистрируется вручную один раз через браузер:
+// https://api.telegram.org/bot{TOKEN}/setWebhook?url={WEBHOOK_URL}
+console.log('Ожидаю webhook на:', WEBHOOK_URL);
 
 // HTTP-сервер принимает запросы от Telegram и отвечает на порту 7860
 const server = http.createServer((req, res) => {
