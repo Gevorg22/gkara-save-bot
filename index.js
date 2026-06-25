@@ -1,7 +1,6 @@
 const TelegramBot = require('node-telegram-bot-api');
 const { exec } = require('node:child_process');
 const fs = require('node:fs');
-const path = require('node:path');
 const http = require('node:http');
 
 const token = process.env.TELEGRAM_TOKEN;
@@ -10,15 +9,45 @@ if (!token) {
     process.exit(1);
 }
 
-http.createServer((req, res) => {
-    res.writeHead(200, { 'Content-Type': 'text/plain' });
-    res.end('gkara-save-bot is running');
-}).listen(7860, () => {
-    console.log('Keep-alive сервер запущен на порту 7860');
+// URL Space на Hugging Face: https://{owner}-{space-name}.hf.space
+const SPACE_URL = 'https://gevorg22-gkara-save-bot.hf.space';
+const WEBHOOK_PATH = `/webhook/${token}`;
+const WEBHOOK_URL = `${SPACE_URL}${WEBHOOK_PATH}`;
+
+const bot = new TelegramBot(token, { webHook: false });
+
+// Устанавливаем webhook при старте
+bot.setWebHook(WEBHOOK_URL).then(() => {
+    console.log('Webhook установлен:', WEBHOOK_URL);
+}).catch((err) => {
+    console.error('Ошибка установки webhook:', err.message);
 });
 
-const bot = new TelegramBot(token, { polling: true });
-console.log('Бот запущен и готов к работе...');
+// HTTP-сервер принимает запросы от Telegram и отвечает на порту 7860
+const server = http.createServer((req, res) => {
+    if (req.method === 'POST' && req.url === WEBHOOK_PATH) {
+        let body = '';
+        req.on('data', chunk => { body += chunk; });
+        req.on('end', () => {
+            try {
+                const update = JSON.parse(body);
+                bot.processUpdate(update);
+            } catch (e) {
+                console.error('Ошибка парсинга update:', e.message);
+            }
+            res.writeHead(200);
+            res.end('OK');
+        });
+    } else {
+        res.writeHead(200, { 'Content-Type': 'text/plain' });
+        res.end('gkara-save-bot is running');
+    }
+});
+
+server.listen(7860, () => {
+    console.log('Сервер запущен на порту 7860');
+    console.log('Бот запущен и готов к работе...');
+});
 
 const SUPPORTED_LINK = /(youtube\.com|youtu\.be|instagram\.com)/i;
 
