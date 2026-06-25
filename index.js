@@ -81,11 +81,10 @@ bot.on('message', async (msg) => {
     const isYoutube = /(youtube\.com|youtu\.be)/i.test(text);
     const ytDlpCmd = [
         'yt-dlp',
-        '-f "best[height<=720]/best"',
         '--merge-output-format mp4',
         '--no-playlist',
         '--no-warnings',
-        isYoutube ? '--extractor-args "youtube:player_client=ios,tv_embedded"' : '',
+        isYoutube ? '--extractor-args "youtube:player_client=ios"' : '',
         '-o', `"${rawFile}"`,
         `"${text}"`,
     ].filter(Boolean).join(' ');
