@@ -117,6 +117,7 @@ bot.on('message', async (msg) => {
                 `-b:v ${videoBitrate}k -maxrate ${videoBitrate * 2}k -bufsize ${videoBitrate * 4}k`,
                 '-acodec aac -b:a 128k',
                 '-vf "scale=trunc(iw/2)*2:trunc(ih/2)*2"',
+                '-movflags +faststart',
                 `"${compressedFile}" -y`,
             ].join(' ');
 
@@ -130,8 +131,13 @@ bot.on('message', async (msg) => {
                 cleanup([rawFile, compressedFile]);
             });
         } else {
-            await sendVideo(chatId, rawFile);
-            cleanup([rawFile]);
+            // Перепаковываем для совместимости с Telegram (faststart)
+            const repackCmd = `ffmpeg -i "${rawFile}" -c copy -movflags +faststart "${compressedFile}" -y`;
+            exec(repackCmd, async (error) => {
+                const fileToSend = (!error && fs.existsSync(compressedFile)) ? compressedFile : rawFile;
+                await sendVideo(chatId, fileToSend);
+                cleanup([rawFile, compressedFile]);
+            });
         }
     });
 });
